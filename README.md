@@ -50,6 +50,7 @@ self_pubkey      = "your-agent-pubkey-hex"   # never replies to its own messages
 poll_seconds     = 15
 agent_pubkeys    = ["other-agent-pubkey"]    # optional: enables the agent-chain cap
 max_agent_chain  = 3                          # max consecutive agent messages before silence
+silence_token    = "NO_REPLY"                 # optional: agent reply that posts nothing
 
 [adapter]
 kind = "anthropic"                            # cli | http | anthropic
@@ -84,6 +85,9 @@ The bridge core never changes.
   tasks — but once `max_agent_chain` consecutive messages are agent-authored
   the bridge goes silent until a human speaks again. Two bridges can never
   ping-pong forever.
+- **The agent can decline.** With `silence_token` set, a reply consisting of
+  exactly that token posts nothing — tell your agent to answer with it when a
+  message merely quotes its name but is addressed to someone else.
 - **Idempotent.** A per-channel state file tracks the last message seen, so a
   restart never re-answers old messages.
 - **Secrets stay out of the repo.** Keys are referenced via `env:` / `file:`.

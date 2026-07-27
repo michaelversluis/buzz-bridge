@@ -38,6 +38,7 @@ class Config:
     max_prompt_chars: int = 8000
     agent_pubkeys: list[str] = field(default_factory=list)  # other agents in the channel
     max_agent_chain: int = 3                   # cap on consecutive agent-authored messages
+    silence_token: str | None = None           # agent reply that means "post nothing"
 
     @staticmethod
     def _resolve_secret(value: str) -> str:
@@ -82,4 +83,5 @@ class Config:
             max_prompt_chars=int(b.get("max_prompt_chars", 8000)),
             agent_pubkeys=b.get("agent_pubkeys", []),
             max_agent_chain=int(b.get("max_agent_chain", 3)),
+            silence_token=b.get("silence_token"),
         )

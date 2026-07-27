@@ -133,6 +133,21 @@ def test_empty_agent_pubkeys_keeps_old_behavior(tmp_path, monkeypatch):
     assert sent == ["ok"]     # no agent list configured -> everyone is answered
 
 
+def test_silence_token_suppresses_post(tmp_path, monkeypatch):
+    """An agent replying with the silence token posts nothing at all."""
+    state = tmp_path / "state.json"
+    b = Bridge(_cfg(state_file=str(state), silence_token="NO_REPLY"),
+               adapter=FakeAdapter("NO_REPLY"))
+    sent = []
+    msgs = [{"created_at": 101, "pubkey": "someone", "content": "@bot fyi only"}]
+    monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
+    monkeypatch.setattr(b, "_send", lambda ch, text: sent.append(text))
+    b._save_state({"chan-1": 100})
+    b.process_once()
+    assert sent == []
+    assert b.adapter.seen == ["fyi only"]     # the agent did run, it chose silence
+
+
 def test_cli_adapter_box_extraction():
     out = ("Initializing agent...\n"
            "╭─ ⚕ Hermes ───────────────╮\n"

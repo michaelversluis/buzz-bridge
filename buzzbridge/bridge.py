@@ -132,6 +132,9 @@ class Bridge:
                 state[channel] = max(int(state.get(channel, 0)), ts)
                 self._save_state(state)
                 reply = self._answer(self.clean_prompt(text))
+                if (reply and self.cfg.silence_token
+                        and reply.strip() == self.cfg.silence_token):
+                    continue          # the agent decided this wasn't for it
                 if reply:
                     self._send(channel, reply)
             state[channel] = max(int(state.get(channel, 0)), newest)
