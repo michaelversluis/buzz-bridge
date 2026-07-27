@@ -1,6 +1,6 @@
 [project]
 name = "buzz-bridge"
-version = "0.2.1"
+version = "0.2.2"
 description = "Connect any agent or LLM to a Buzz channel."
 readme = "README.md"
 requires-python = ">=3.8"
