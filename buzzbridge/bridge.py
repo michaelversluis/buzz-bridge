@@ -29,13 +29,18 @@ class Bridge:
         e["BUZZ_PRIVATE_KEY"] = self.cfg.private_key
         return e
 
+    def _log(self, msg: str):
+        print("%s %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"), msg), flush=True)
+
     def _get(self, channel: str, since: int):
         r = subprocess.run(
             [self.cfg.buzz_cli, "messages", "get", "--channel", channel,
              "--since", str(since), "--limit", "50", "--kinds", "9"],
             capture_output=True, text=True, env=self._env(), timeout=60)
         if r.returncode != 0:
-            print("get failed:", r.stderr.strip()[:200], file=sys.stderr)
+            print("%s get failed: %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                         r.stderr.strip()[:200]),
+                  file=sys.stderr, flush=True)
             return []
         try:
             return sorted(json.loads(r.stdout or "[]"),
@@ -57,11 +62,13 @@ class Bridge:
         except ValueError:
             return []
 
-    def _send(self, channel: str, text: str):
-        subprocess.run(
-            [self.cfg.buzz_cli, "messages", "send", "--channel", channel,
-             "--content", text],
-            capture_output=True, text=True, env=self._env(), timeout=60)
+    def _send(self, channel: str, text: str, reply_to: str | None = None):
+        argv = [self.cfg.buzz_cli, "messages", "send", "--channel", channel,
+                "--content", text]
+        if reply_to:
+            argv += ["--reply-to", reply_to]
+        subprocess.run(argv, capture_output=True, text=True,
+                       env=self._env(), timeout=60)
 
     # ── state ──────────────────────────────────────────────────────────
     def _load_state(self):
@@ -81,6 +88,34 @@ class Bridge:
         if self.cfg.respond_to_all:
             return True
         return any(p.search(text or "") for p in self._patterns)
+
+    def is_ptag_mention(self, msg: dict) -> bool:
+        """Rich @-mentions carry a p-tag with the mentioned pubkey — more
+        precise than text matching, and they survive display-name changes."""
+        if not self.cfg.self_pubkey:
+            return False
+        return any(t[0] == "p" and len(t) > 1 and t[1] == self.cfg.self_pubkey
+                   for t in msg.get("tags", []) if isinstance(t, list) and t)
+
+    def _label(self, pubkey: str) -> str:
+        return self.cfg.display_names.get(pubkey, pubkey[:8])
+
+    def build_context(self, channel: str, trigger: dict) -> str:
+        """Last N channel messages before the trigger, oldest first, labeled."""
+        n = self.cfg.context_messages
+        if n <= 0:
+            return ""
+        ts = trigger.get("created_at", 0)
+        tid = trigger.get("id")
+        recent = [m for m in self._recent(channel, limit=n + 5)
+                  if m.get("created_at", 0) <= ts and m.get("id") != tid][:n]
+        if not recent:
+            return ""
+        lines = ["%s: %s" % (self._label(m.get("pubkey", "")),
+                             (m.get("content") or "").strip())
+                 for m in reversed(recent)]
+        return ("Recent channel history (oldest first):\n%s\n\n"
+                "Message addressed to you:\n" % "\n".join(lines))
 
     def agent_chain_len(self, channel: str, trigger: dict) -> int:
         """Consecutive agent-authored messages ending at `trigger`.
@@ -120,7 +155,7 @@ class Bridge:
                 if self.cfg.self_pubkey and m.get("pubkey") == self.cfg.self_pubkey:
                     continue
                 text = m.get("content", "")
-                if not self.is_trigger(text):
+                if not (self.is_trigger(text) or self.is_ptag_mention(m)):
                     continue
                 if (self.cfg.agent_pubkeys
                         and m.get("pubkey") in self.cfg.agent_pubkeys
@@ -131,12 +166,16 @@ class Bridge:
                 # cause the same mention to be answered twice.
                 state[channel] = max(int(state.get(channel, 0)), ts)
                 self._save_state(state)
-                reply = self._answer(self.clean_prompt(text))
+                prompt = self.build_context(channel, m) + self.clean_prompt(text)
+                reply = self._answer(prompt)
                 if (reply and self.cfg.silence_token
                         and reply.strip() == self.cfg.silence_token):
+                    self._log("declined %s" % (m.get("id") or "")[:8])
                     continue          # the agent decided this wasn't for it
                 if reply:
-                    self._send(channel, reply)
+                    self._send(channel, reply,
+                               reply_to=m.get("id") if self.cfg.thread_replies else None)
+                    self._log("answered %s" % (m.get("id") or "")[:8])
             state[channel] = max(int(state.get(channel, 0)), newest)
         self._save_state(state)
 
@@ -155,7 +194,9 @@ class Bridge:
             try:
                 self.process_once()
             except Exception as e:  # noqa: BLE001 — daemon must not die
-                print("round error:", str(e)[:200], file=sys.stderr)
+                print("%s round error: %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                              str(e)[:200]),
+                      file=sys.stderr, flush=True)
             if once:
                 return
             time.sleep(self.cfg.poll_seconds)

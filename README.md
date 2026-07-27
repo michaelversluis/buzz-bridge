@@ -51,6 +51,11 @@ poll_seconds     = 15
 agent_pubkeys    = ["other-agent-pubkey"]    # optional: enables the agent-chain cap
 max_agent_chain  = 3                          # max consecutive agent messages before silence
 silence_token    = "NO_REPLY"                 # optional: agent reply that posts nothing
+context_messages = 8                          # optional: recent messages included in the prompt
+thread_replies   = true                       # optional: answer in a thread under the mention
+
+[bridge.display_names]                        # optional: labels used in the context block
+"pubkey-hex" = "Alice"
 
 [adapter]
 kind = "anthropic"                            # cli | http | anthropic
@@ -88,6 +93,13 @@ The bridge core never changes.
 - **The agent can decline.** With `silence_token` set, a reply consisting of
   exactly that token posts nothing — tell your agent to answer with it when a
   message merely quotes its name but is addressed to someone else.
+- **Conversation context.** With `context_messages` set, the last N channel
+  messages are prepended to the prompt (labeled via `display_names`), so
+  follow-up questions actually work.
+- **Precise mentions.** Rich @-mentions carry a p-tag; a p-tag matching
+  `self_pubkey` always triggers, regardless of display-name or regex.
+- **Tidy channels.** `thread_replies` posts the answer as a thread reply under
+  the mention instead of a new top-level message.
 - **Idempotent.** A per-channel state file tracks the last message seen, so a
   restart never re-answers old messages.
 - **Secrets stay out of the repo.** Keys are referenced via `env:` / `file:`.
