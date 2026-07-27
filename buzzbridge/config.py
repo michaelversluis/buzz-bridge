@@ -39,6 +39,9 @@ class Config:
     agent_pubkeys: list[str] = field(default_factory=list)  # other agents in the channel
     max_agent_chain: int = 3                   # cap on consecutive agent-authored messages
     silence_token: str | None = None           # agent reply that means "post nothing"
+    context_messages: int = 0                  # recent channel messages included in the prompt
+    thread_replies: bool = False               # reply in a thread under the mention
+    display_names: dict = field(default_factory=dict)  # pubkey -> label for context rendering
 
     @staticmethod
     def _resolve_secret(value: str) -> str:
@@ -84,4 +87,7 @@ class Config:
             agent_pubkeys=b.get("agent_pubkeys", []),
             max_agent_chain=int(b.get("max_agent_chain", 3)),
             silence_token=b.get("silence_token"),
+            context_messages=int(b.get("context_messages", 0)),
+            thread_replies=bool(b.get("thread_replies", False)),
+            display_names=b.get("display_names", {}),
         )

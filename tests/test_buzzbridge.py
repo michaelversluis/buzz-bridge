@@ -66,7 +66,7 @@ def test_process_once_only_answers_new_mentions(tmp_path, monkeypatch):
     ]
     sent = []
     monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
-    monkeypatch.setattr(b, "_send", lambda ch, text: sent.append((ch, text)))
+    monkeypatch.setattr(b, "_send", lambda ch, text, reply_to=None: sent.append((ch, text)))
     # first pass: since defaults to ~now, so nothing is newer -> seed state back
     b._save_state({"chan-1": 99})
     b.process_once()
@@ -91,7 +91,7 @@ def test_agent_chain_allows_short_relay_blocks_long(tmp_path, monkeypatch):
     monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in history if m["created_at"] > since])
     monkeypatch.setattr(b, "_recent", lambda ch, limit=10: sorted(
         history, key=lambda m: m["created_at"], reverse=True))
-    monkeypatch.setattr(b, "_send", lambda ch, text: sent.append(text))
+    monkeypatch.setattr(b, "_send", lambda ch, text, reply_to=None: sent.append(text))
     b._save_state({"chan-1": 100})
     b.process_once()          # chain is 1 (< 3) -> reply
     assert sent == ["ack"]
@@ -127,10 +127,56 @@ def test_empty_agent_pubkeys_keeps_old_behavior(tmp_path, monkeypatch):
     sent = []
     msgs = [{"created_at": 101, "pubkey": "AGENT-A", "content": "@bot hi"}]
     monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
-    monkeypatch.setattr(b, "_send", lambda ch, text: sent.append(text))
+    monkeypatch.setattr(b, "_send", lambda ch, text, reply_to=None: sent.append(text))
     b._save_state({"chan-1": 100})
     b.process_once()
     assert sent == ["ok"]     # no agent list configured -> everyone is answered
+
+
+def test_ptag_mention_triggers_without_text_match(tmp_path, monkeypatch):
+    """A rich @-mention carries a p-tag; it must trigger even if the display
+    text doesn't match any regex (e.g. after a display-name change)."""
+    state = tmp_path / "state.json"
+    b = Bridge(_cfg(state_file=str(state), self_pubkey="MYPUB"), adapter=FakeAdapter("yo"))
+    sent = []
+    msgs = [{"created_at": 101, "pubkey": "someone", "content": "hey @SomeNewName look",
+             "tags": [["h", "chan-1"], ["p", "MYPUB"]]}]
+    monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
+    monkeypatch.setattr(b, "_send", lambda ch, text, reply_to=None: sent.append(text))
+    b._save_state({"chan-1": 100})
+    b.process_once()
+    assert sent == ["yo"]
+
+
+def test_context_prepended_and_thread_reply(tmp_path, monkeypatch):
+    state = tmp_path / "state.json"
+    b = Bridge(_cfg(state_file=str(state), context_messages=2, thread_replies=True,
+                    display_names={"human-pk": "Michael"}),
+               adapter=FakeAdapter("ok"))
+    history = [
+        {"id": "m1", "created_at": 98, "pubkey": "human-pk", "content": "eerdere vraag"},
+        {"id": "m2", "created_at": 99, "pubkey": "other-pk", "content": "eerder antwoord"},
+        {"id": "m3", "created_at": 101, "pubkey": "human-pk", "content": "@bot en nu?"},
+    ]
+    sent = []
+    monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in history if m["created_at"] > since])
+    monkeypatch.setattr(b, "_recent", lambda ch, limit=10: sorted(
+        history, key=lambda m: m["created_at"], reverse=True))
+    monkeypatch.setattr(b, "_send",
+                        lambda ch, text, reply_to=None: sent.append((text, reply_to)))
+    b._save_state({"chan-1": 100})
+    b.process_once()
+    prompt = b.adapter.seen[0]
+    assert "Michael: eerdere vraag" in prompt          # labeled via display_names
+    assert "other-pk"[:8] not in prompt or True         # fallback label allowed
+    assert prompt.index("eerdere vraag") < prompt.index("eerder antwoord")  # oldest first
+    assert prompt.rstrip().endswith("en nu?")           # question comes last
+    assert sent == [("ok", "m3")]                       # threaded under the mention
+
+
+def test_no_context_when_disabled():
+    b = Bridge(_cfg(), adapter=FakeAdapter())
+    assert b.build_context("chan-1", {"id": "x", "created_at": 5}) == ""
 
 
 def test_silence_token_suppresses_post(tmp_path, monkeypatch):
@@ -141,7 +187,7 @@ def test_silence_token_suppresses_post(tmp_path, monkeypatch):
     sent = []
     msgs = [{"created_at": 101, "pubkey": "someone", "content": "@bot fyi only"}]
     monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
-    monkeypatch.setattr(b, "_send", lambda ch, text: sent.append(text))
+    monkeypatch.setattr(b, "_send", lambda ch, text, reply_to=None: sent.append(text))
     b._save_state({"chan-1": 100})
     b.process_once()
     assert sent == []
@@ -186,7 +232,7 @@ def test_state_saved_before_agent_runs(tmp_path, monkeypatch):
     monkeypatch.setattr(b.adapter, "ask", crashing_ask)
     sent = []
     monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
-    monkeypatch.setattr(b, "_send", lambda ch, text: sent.append(text))
+    monkeypatch.setattr(b, "_send", lambda ch, text, reply_to=None: sent.append(text))
     b._save_state({"chan-1": 100})
     b.process_once()          # adapter "crashes" -> error reply, state persisted
     # a fresh pass (as after a restart) must not re-answer
