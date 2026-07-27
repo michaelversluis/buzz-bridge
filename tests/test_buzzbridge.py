@@ -142,6 +142,44 @@ def test_cli_adapter_box_extraction():
     assert _extract_box(out, "Hermes") == "Ja, ik ben bereikbaar."
 
 
+def test_box_extraction_takes_last_box():
+    """Streaming agents print progress boxes; only the final box is the answer."""
+    out = ("╭─ ⚕ Hermes ───────────────╮\n"
+           "  Bevindingen verzameld — nu verifieer ik...\n"
+           "╰──────────────────────────╯\n"
+           "tool output, noise\n"
+           "╭─ ⚕ Hermes ───────────────╮\n"
+           "  Definitief antwoord.\n"
+           "╰──────────────────────────╯\n")
+    assert _extract_box(out, "Hermes") == "Definitief antwoord."
+
+
+def test_state_saved_before_agent_runs(tmp_path, monkeypatch):
+    """A crash/restart during a slow answer must never re-answer the mention."""
+    state = tmp_path / "state.json"
+    b = Bridge(_cfg(state_file=str(state)), adapter=FakeAdapter("hi"))
+
+    class Boom(Exception):
+        pass
+
+    def crashing_ask(prompt):
+        # by the time the agent runs, the trigger must already be persisted
+        assert json.load(open(state))["chan-1"] == 101
+        raise Boom()
+
+    msgs = [{"created_at": 101, "pubkey": "someone", "content": "@bot slow question"}]
+    monkeypatch.setattr(b.adapter, "ask", crashing_ask)
+    sent = []
+    monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
+    monkeypatch.setattr(b, "_send", lambda ch, text: sent.append(text))
+    b._save_state({"chan-1": 100})
+    b.process_once()          # adapter "crashes" -> error reply, state persisted
+    # a fresh pass (as after a restart) must not re-answer
+    monkeypatch.setattr(b.adapter, "ask", lambda p: "late answer")
+    b.process_once()
+    assert not any("late answer" in s for s in sent)
+
+
 def test_cli_adapter_runs_command():
     a = CliAdapter({"command": ["printf", "%s", "hello {prompt}"]})
     assert a.ask("world") == "hello world"

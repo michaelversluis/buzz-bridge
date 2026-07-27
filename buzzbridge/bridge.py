@@ -126,10 +126,15 @@ class Bridge:
                         and m.get("pubkey") in self.cfg.agent_pubkeys
                         and self.agent_chain_len(channel, m) >= self.cfg.max_agent_chain):
                     continue
+                # Mark this message processed *before* the agent runs: answers
+                # can take minutes, and a crash/restart mid-answer must never
+                # cause the same mention to be answered twice.
+                state[channel] = max(int(state.get(channel, 0)), ts)
+                self._save_state(state)
                 reply = self._answer(self.clean_prompt(text))
                 if reply:
                     self._send(channel, reply)
-            state[channel] = newest
+            state[channel] = max(int(state.get(channel, 0)), newest)
         self._save_state(state)
 
     def _answer(self, prompt: str) -> str:
