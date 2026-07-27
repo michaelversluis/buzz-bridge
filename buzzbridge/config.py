@@ -36,6 +36,8 @@ class Config:
     poll_seconds: int = 15
     state_file: str = "buzzbridge-state.json"
     max_prompt_chars: int = 8000
+    agent_pubkeys: list[str] = field(default_factory=list)  # other agents in the channel
+    max_agent_chain: int = 3                   # cap on consecutive agent-authored messages
 
     @staticmethod
     def _resolve_secret(value: str) -> str:
@@ -78,4 +80,6 @@ class Config:
             poll_seconds=int(b.get("poll_seconds", 15)),
             state_file=os.path.expanduser(b.get("state_file", "buzzbridge-state.json")),
             max_prompt_chars=int(b.get("max_prompt_chars", 8000)),
+            agent_pubkeys=b.get("agent_pubkeys", []),
+            max_agent_chain=int(b.get("max_agent_chain", 3)),
         )
