@@ -43,6 +43,20 @@ class Bridge:
         except ValueError:
             return []
 
+    def _recent(self, channel: str, limit: int = 10):
+        """Latest messages in a channel, newest first (no since-filter)."""
+        r = subprocess.run(
+            [self.cfg.buzz_cli, "messages", "get", "--channel", channel,
+             "--limit", str(limit), "--kinds", "9"],
+            capture_output=True, text=True, env=self._env(), timeout=60)
+        if r.returncode != 0:
+            return []
+        try:
+            return sorted(json.loads(r.stdout or "[]"),
+                          key=lambda m: m.get("created_at", 0), reverse=True)
+        except ValueError:
+            return []
+
     def _send(self, channel: str, text: str):
         subprocess.run(
             [self.cfg.buzz_cli, "messages", "send", "--channel", channel,
@@ -68,6 +82,25 @@ class Bridge:
             return True
         return any(p.search(text or "") for p in self._patterns)
 
+    def agent_chain_len(self, channel: str, trigger: dict) -> int:
+        """Consecutive agent-authored messages ending at `trigger`.
+
+        Agent-to-agent relays are allowed, but every hop grows the chain; a
+        human message resets it. Once the chain reaches max_agent_chain the
+        bridge stays silent, so two bridges can never ping-pong forever.
+        """
+        agents = set(self.cfg.agent_pubkeys)
+        ts = trigger.get("created_at", 0)
+        chain = 0
+        for m in self._recent(channel):
+            if m.get("created_at", 0) > ts:
+                continue
+            if m.get("pubkey") in agents:
+                chain += 1
+            else:
+                break
+        return chain
+
     def clean_prompt(self, text: str) -> str:
         p = text
         for pat in self._patterns:
@@ -88,6 +121,10 @@ class Bridge:
                     continue
                 text = m.get("content", "")
                 if not self.is_trigger(text):
+                    continue
+                if (self.cfg.agent_pubkeys
+                        and m.get("pubkey") in self.cfg.agent_pubkeys
+                        and self.agent_chain_len(channel, m) >= self.cfg.max_agent_chain):
                     continue
                 reply = self._answer(self.clean_prompt(text))
                 if reply:

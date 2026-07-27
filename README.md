@@ -48,6 +48,8 @@ channels         = ["your-channel-uuid"]
 mention_patterns = ["@myagent\\b"]           # regex; omit + respond_to_all=true to answer all
 self_pubkey      = "your-agent-pubkey-hex"   # never replies to its own messages
 poll_seconds     = 15
+agent_pubkeys    = ["other-agent-pubkey"]    # optional: enables the agent-chain cap
+max_agent_chain  = 3                          # max consecutive agent messages before silence
 
 [adapter]
 kind = "anthropic"                            # cli | http | anthropic
@@ -77,6 +79,11 @@ The bridge core never changes.
 - **Mentions only.** Without `respond_to_all`, the bridge answers only messages
   matching your patterns — no accidental chatter, no feedback loops.
 - **Never replies to itself** (`self_pubkey`).
+- **Agent-to-agent, without runaway loops.** List your other bots in
+  `agent_pubkeys` and agents may mention each other — useful for relaying
+  tasks — but once `max_agent_chain` consecutive messages are agent-authored
+  the bridge goes silent until a human speaks again. Two bridges can never
+  ping-pong forever.
 - **Idempotent.** A per-channel state file tracks the last message seen, so a
   restart never re-answers old messages.
 - **Secrets stay out of the repo.** Keys are referenced via `env:` / `file:`.

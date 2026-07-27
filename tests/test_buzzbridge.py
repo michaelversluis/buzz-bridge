@@ -77,6 +77,62 @@ def test_process_once_only_answers_new_mentions(tmp_path, monkeypatch):
     assert len(sent) == 1
 
 
+def test_agent_chain_allows_short_relay_blocks_long(tmp_path, monkeypatch):
+    """Agent A may relay to agent B, but a runaway A↔B ping-pong is cut off."""
+    state = tmp_path / "state.json"
+    cfg = _cfg(state_file=str(state), agent_pubkeys=["AGENT-A", "AGENT-B"],
+               max_agent_chain=3)
+    b = Bridge(cfg, adapter=FakeAdapter("ack"))
+    history = [
+        {"created_at": 100, "pubkey": "human", "content": "please ask the other bot"},
+        {"created_at": 101, "pubkey": "AGENT-A", "content": "@bot can you check X"},
+    ]
+    sent = []
+    monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in history if m["created_at"] > since])
+    monkeypatch.setattr(b, "_recent", lambda ch, limit=10: sorted(
+        history, key=lambda m: m["created_at"], reverse=True))
+    monkeypatch.setattr(b, "_send", lambda ch, text: sent.append(text))
+    b._save_state({"chan-1": 100})
+    b.process_once()          # chain is 1 (< 3) -> reply
+    assert sent == ["ack"]
+    # now the tail of the channel is agent-only and long enough to trip the cap
+    history += [
+        {"created_at": 102, "pubkey": "AGENT-B", "content": "@bot and back to you"},
+        {"created_at": 103, "pubkey": "AGENT-A", "content": "@bot once more"},
+    ]
+    b._save_state({"chan-1": 102})
+    b.process_once()          # chain is 3 (>= 3) -> silence
+    assert sent == ["ack"]
+
+
+def test_agent_chain_resets_on_human_message(tmp_path, monkeypatch):
+    state = tmp_path / "state.json"
+    cfg = _cfg(state_file=str(state), agent_pubkeys=["AGENT-A", "AGENT-B"],
+               max_agent_chain=3)
+    b = Bridge(cfg, adapter=FakeAdapter())
+    history = [
+        {"created_at": 100, "pubkey": "AGENT-A", "content": "earlier bot talk"},
+        {"created_at": 101, "pubkey": "AGENT-B", "content": "more bot talk"},
+        {"created_at": 102, "pubkey": "human", "content": "thanks!"},
+        {"created_at": 103, "pubkey": "AGENT-A", "content": "@bot new request"},
+    ]
+    monkeypatch.setattr(b, "_recent", lambda ch, limit=10: sorted(
+        history, key=lambda m: m["created_at"], reverse=True))
+    assert b.agent_chain_len("chan-1", history[-1]) == 1  # human at 102 resets
+
+
+def test_empty_agent_pubkeys_keeps_old_behavior(tmp_path, monkeypatch):
+    state = tmp_path / "state.json"
+    b = Bridge(_cfg(state_file=str(state)), adapter=FakeAdapter("ok"))
+    sent = []
+    msgs = [{"created_at": 101, "pubkey": "AGENT-A", "content": "@bot hi"}]
+    monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
+    monkeypatch.setattr(b, "_send", lambda ch, text: sent.append(text))
+    b._save_state({"chan-1": 100})
+    b.process_once()
+    assert sent == ["ok"]     # no agent list configured -> everyone is answered
+
+
 def test_cli_adapter_box_extraction():
     out = ("Initializing agent...\n"
            "╭─ ⚕ Hermes ───────────────╮\n"
