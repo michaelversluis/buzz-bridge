@@ -136,13 +136,16 @@ def build_adapter(kind: str, options: dict) -> Adapter:
 # ── helpers ──────────────────────────────────────────────────────────────
 
 def _extract_box(text: str, agent_name: str) -> str | None:
-    """Pull the reply out of a box-drawing frame whose top border names the agent."""
+    """Pull the reply out of a box-drawing frame whose top border names the agent.
+
+    Agents that stream progress may print several boxes; the last one is the
+    final answer, so that is the one returned.
+    """
     lines = text.splitlines()
     start = None
     for i, ln in enumerate(lines):
         if agent_name in ln and ("╭" in ln or "┌" in ln):
             start = i + 1
-            break
     if start is None:
         return None
     body = []
