@@ -1,0 +1,21 @@
+# buzz-bridge — example: connect a CLI/TUI agent to a Buzz channel.
+# Copy, fill in your own values, then run:  python -m buzzbridge run -c cli-agent.toml
+
+[bridge]
+relay_url        = "http://YOUR-RELAY-HOST:3000"      # or set env BUZZ_RELAY_URL
+private_key      = "file:~/.secrets/agent.key"        # nsec/hex; also: "env:BUZZ_PRIVATE_KEY"
+buzz_cli         = "buzz"                             # path to the official buzz CLI
+channels         = ["YOUR-CHANNEL-UUID"]
+mention_patterns = ["@myagent\\b", "\\bmyagent[,:]", "^myagent\\b"]
+self_pubkey      = "YOUR-AGENT-PUBKEY-HEX"            # never replies to its own messages
+poll_seconds     = 15
+state_file       = "~/.local/state/buzzbridge.json"
+
+[adapter]
+# Runs a command; "{prompt}" is substituted into argv. `box_agent` extracts the
+# reply from a TUI agent that prints its answer inside a box-drawing frame.
+kind      = "cli"
+command   = ["/path/to/agent", "--query", "{prompt}"]
+cwd       = "/path/to/agent-workdir"
+box_agent = "MyAgent"
+timeout   = 600

@@ -1,0 +1,20 @@
+[project]
+name = "buzz-bridge"
+version = "0.1.0"
+description = "Connect any agent or LLM to a Buzz channel."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "Apache-2.0" }
+dependencies = ["tomli; python_version < '3.11'"]
+authors = [{ name = "Michael Versluis" }]
+keywords = ["buzz", "nostr", "agents", "llm", "chatops"]
+
+[project.scripts]
+buzzbridge = "buzzbridge.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["buzzbridge"]

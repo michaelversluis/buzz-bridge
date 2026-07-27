@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.egg-info/
+buzzbridge-state*.json
+.venv/
+dist/
+build/

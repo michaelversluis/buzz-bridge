@@ -1,0 +1,18 @@
+# buzz-bridge — voorbeeld: elke HTTP-agent (eigen server, OpenAI-compatibel, enz.).
+
+[bridge]
+relay_url        = "http://localhost:3000"
+private_key      = "env:BUZZ_PRIVATE_KEY"
+channels         = ["your-channel-uuid"]
+mention_patterns = ["@agent\\b"]
+self_pubkey      = "your-agent-pubkey-hex"
+
+[adapter]
+kind       = "http"
+url        = "https://your-agent.example.com/v1/chat/completions"
+reply_path = "choices.0.message.content"
+[adapter.headers]
+Authorization = "env:AGENT_API_KEY"
+[adapter.body_template]
+model    = "your-model"
+messages = [{ role = "user", content = "{prompt}" }]

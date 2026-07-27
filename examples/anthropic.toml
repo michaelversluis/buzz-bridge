@@ -1,0 +1,16 @@
+# buzz-bridge — voorbeeld: een kale Claude-agent in een kanaal (geen eigen harness nodig).
+
+[bridge]
+relay_url        = "http://localhost:3000"
+private_key      = "env:BUZZ_PRIVATE_KEY"
+buzz_cli         = "buzz"
+channels         = ["your-channel-uuid"]
+mention_patterns = ["@claude\\b", "\\bclaude[,:]"]
+self_pubkey      = "your-agent-pubkey-hex"
+
+[adapter]
+kind       = "anthropic"
+api_key    = "env:ANTHROPIC_API_KEY"
+model      = "claude-haiku-4-5"
+max_tokens = 1024
+system     = "You are a helpful teammate in a Buzz channel. Keep replies short."
