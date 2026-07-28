@@ -192,6 +192,15 @@ def test_thread_reply_targets_root_not_reply(tmp_path, monkeypatch):
     assert Bridge.thread_root({"id": "top", "tags": [["h", "chan-1"]]}) == "top"
 
 
+def test_send_argv_safe_for_leading_dash():
+    """A reply starting with '- ' (bullet list) must not be parsed as a flag."""
+    b = Bridge(_cfg(), adapter=FakeAdapter())
+    argv = b._send_argv("chan-1", "- punt een\n- punt twee", "root-id")
+    assert "--content=- punt een\n- punt twee" in argv
+    assert "--reply-to=root-id" in argv
+    assert "-" not in [a for a in argv if not a.startswith("-")][2:]
+
+
 def test_no_context_when_disabled():
     b = Bridge(_cfg(), adapter=FakeAdapter())
     assert b.build_context("chan-1", {"id": "x", "created_at": 5}) == ""

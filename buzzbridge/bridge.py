@@ -62,12 +62,18 @@ class Bridge:
         except ValueError:
             return []
 
-    def _send(self, channel: str, text: str, reply_to: str | None = None) -> bool:
+    def _send_argv(self, channel: str, text: str, reply_to: str | None):
+        # --content=... (not "--content ...") so replies that start with "-"
+        # (bullet lists!) aren't parsed as CLI flags.
         argv = [self.cfg.buzz_cli, "messages", "send", "--channel", channel,
-                "--content", text]
+                "--content=%s" % text]
         if reply_to:
-            argv += ["--reply-to", reply_to]
-        r = subprocess.run(argv, capture_output=True, text=True,
+            argv.append("--reply-to=%s" % reply_to)
+        return argv
+
+    def _send(self, channel: str, text: str, reply_to: str | None = None) -> bool:
+        r = subprocess.run(self._send_argv(channel, text, reply_to),
+                           capture_output=True, text=True,
                            env=self._env(), timeout=60)
         if r.returncode != 0:
             print("%s send failed: %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"),
