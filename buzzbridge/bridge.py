@@ -62,13 +62,29 @@ class Bridge:
         except ValueError:
             return []
 
-    def _send(self, channel: str, text: str, reply_to: str | None = None):
+    def _send(self, channel: str, text: str, reply_to: str | None = None) -> bool:
         argv = [self.cfg.buzz_cli, "messages", "send", "--channel", channel,
                 "--content", text]
         if reply_to:
             argv += ["--reply-to", reply_to]
-        subprocess.run(argv, capture_output=True, text=True,
-                       env=self._env(), timeout=60)
+        r = subprocess.run(argv, capture_output=True, text=True,
+                           env=self._env(), timeout=60)
+        if r.returncode != 0:
+            print("%s send failed: %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                          (r.stderr or r.stdout).strip()[:200]),
+                  file=sys.stderr, flush=True)
+            return False
+        return True
+
+    @staticmethod
+    def thread_root(msg: dict) -> str | None:
+        """The thread root to reply under: a message that is itself a thread
+        reply carries the root in its first e-tag; replying to the reply's own
+        id is rejected by the relay. Top-level messages are their own root."""
+        for t in msg.get("tags", []):
+            if isinstance(t, list) and t and t[0] == "e" and len(t) > 1:
+                return t[1]
+        return msg.get("id")
 
     # ── state ──────────────────────────────────────────────────────────
     def _load_state(self):
@@ -173,9 +189,10 @@ class Bridge:
                     self._log("declined %s" % (m.get("id") or "")[:8])
                     continue          # the agent decided this wasn't for it
                 if reply:
-                    self._send(channel, reply,
-                               reply_to=m.get("id") if self.cfg.thread_replies else None)
-                    self._log("answered %s" % (m.get("id") or "")[:8])
+                    ok = self._send(channel, reply,
+                                    reply_to=self.thread_root(m) if self.cfg.thread_replies else None)
+                    self._log("%s %s" % ("answered" if ok else "SEND-FAILED",
+                                         (m.get("id") or "")[:8]))
             state[channel] = max(int(state.get(channel, 0)), newest)
         self._save_state(state)
 

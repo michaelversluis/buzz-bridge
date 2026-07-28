@@ -174,6 +174,24 @@ def test_context_prepended_and_thread_reply(tmp_path, monkeypatch):
     assert sent == [("ok", "m3")]                       # threaded under the mention
 
 
+def test_thread_reply_targets_root_not_reply(tmp_path, monkeypatch):
+    """Replying under a message that is itself a thread reply must target the
+    thread ROOT (its e-tag), not the reply's own id — relays reject the latter."""
+    state = tmp_path / "state.json"
+    b = Bridge(_cfg(state_file=str(state), thread_replies=True), adapter=FakeAdapter("ok"))
+    msgs = [{"id": "reply-msg", "created_at": 101, "pubkey": "someone",
+             "content": "@bot vraagje", "tags": [["e", "root-msg"], ["h", "chan-1"]]}]
+    sent = []
+    monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
+    monkeypatch.setattr(b, "_send",
+                        lambda ch, text, reply_to=None: sent.append(reply_to) or True)
+    b._save_state({"chan-1": 100})
+    b.process_once()
+    assert sent == ["root-msg"]
+    # a top-level message is its own root
+    assert Bridge.thread_root({"id": "top", "tags": [["h", "chan-1"]]}) == "top"
+
+
 def test_no_context_when_disabled():
     b = Bridge(_cfg(), adapter=FakeAdapter())
     assert b.build_context("chan-1", {"id": "x", "created_at": 5}) == ""
