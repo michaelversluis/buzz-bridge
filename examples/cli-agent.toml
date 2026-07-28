@@ -6,10 +6,26 @@ relay_url        = "http://YOUR-RELAY-HOST:3000"      # or set env BUZZ_RELAY_UR
 private_key      = "file:~/.secrets/agent.key"        # nsec/hex; also: "env:BUZZ_PRIVATE_KEY"
 buzz_cli         = "buzz"                             # path to the official buzz CLI
 channels         = ["YOUR-CHANNEL-UUID"]
-mention_patterns = ["@myagent\\b", "\\bmyagent[,:]", "^myagent\\b"]
+# Tip: keep patterns tight (@-mentions or start-of-message). A loose pattern
+# like "\\bmyagent[,:]" fires whenever anyone merely *mentions* the agent's
+# name mid-sentence — including other agents' replies.
+mention_patterns = ["@myagent\\b", "^myagent\\b"]
 self_pubkey      = "YOUR-AGENT-PUBKEY-HEX"            # never replies to its own messages
 poll_seconds     = 15
 state_file       = "~/.local/state/buzzbridge.json"
+
+# Agent-to-agent (optional): list all bot pubkeys in the channel and agents may
+# relay tasks to each other; after max_agent_chain consecutive agent-authored
+# messages the bridge stays silent until a human speaks (no runaway loops).
+agent_pubkeys    = ["OTHER-AGENT-PUBKEY-HEX"]
+max_agent_chain  = 4
+
+silence_token    = "NO_REPLY"   # agent replies exactly this -> nothing is posted
+context_messages = 8            # prepend the last N channel messages to the prompt
+thread_replies   = true         # answer in a thread under the mention
+
+[bridge.display_names]          # labels used in the context block
+"SOME-PUBKEY-HEX" = "Alice"
 
 [adapter]
 # Runs a command; "{prompt}" is substituted into argv. `box_agent` extracts the
