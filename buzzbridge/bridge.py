@@ -190,7 +190,7 @@ class Bridge:
                 state[channel] = max(int(state.get(channel, 0)), ts)
                 self._save_state(state)
                 prompt = self.build_context(channel, m) + self.clean_prompt(text)
-                reply = self._answer(prompt, m.get("pubkey", ""))
+                reply = self._answer(prompt, m.get("pubkey", ""), channel)
                 if (reply and self.cfg.silence_token
                         and reply.strip() == self.cfg.silence_token):
                     self._log("declined %s" % (m.get("id") or "")[:8])
@@ -203,17 +203,21 @@ class Bridge:
             state[channel] = max(int(state.get(channel, 0)), newest)
         self._save_state(state)
 
-    def _accepts_sender(self) -> bool:
-        """Kent deze adapter de afzender-parameter? Adapters van buiten deze
-        repo (van vóór 0.4) hebben alleen ask(prompt) — die blijven werken."""
+    def _adapter_params(self) -> int:
+        """Hoeveel context neemt deze adapter aan? Adapters van buiten deze repo
+        kennen alleen ask(prompt) (vóór 0.4) of ask(prompt, sender) (0.4) — die
+        blijven werken."""
         try:
-            return len(inspect.signature(self.adapter.ask).parameters) >= 2
+            return len(inspect.signature(self.adapter.ask).parameters)
         except (TypeError, ValueError):
-            return False
+            return 1
 
-    def _answer(self, prompt: str, sender: str = "") -> str:
+    def _answer(self, prompt: str, sender: str = "", channel: str = "") -> str:
         try:
-            if self._accepts_sender():
+            params = self._adapter_params()
+            if params >= 3:
+                return self.adapter.ask(prompt, sender, channel) or "(no answer)"
+            if params == 2:
                 return self.adapter.ask(prompt, sender) or "(no answer)"
             return self.adapter.ask(prompt) or "(no answer)"
         except subprocess.TimeoutExpired:

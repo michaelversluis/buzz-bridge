@@ -321,3 +321,39 @@ def test_oude_adapter_zonder_afzender_blijft_werken(tmp_path, monkeypatch):
     b._save_state({"chan-1": 99})
     b.process_once()
     assert verstuurd == ["ok"]
+
+
+def test_kanaal_gaat_mee_naar_de_adapter(tmp_path, monkeypatch):
+    """Met meerdere kanalen moet de wrapper weten waar een bericht vandaan komt."""
+    gezien = {}
+
+    class AdapterMetKanaal:
+        def ask(self, prompt, sender="", channel=""):
+            gezien.update(sender=sender, channel=channel)
+            return "ok"
+
+    state = tmp_path / "state.json"
+    b = Bridge(_cfg(state_file=str(state)), adapter=AdapterMetKanaal())
+    msgs = [{"created_at": 100, "pubkey": "mens-1", "content": "@bot doe iets"}]
+    monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
+    monkeypatch.setattr(b, "_send", lambda ch, text, reply_to=None: None)
+    b._save_state({"chan-1": 99})
+    b.process_once()
+    assert gezien == {"sender": "mens-1", "channel": "chan-1"}
+
+
+def test_adapter_met_alleen_afzender_blijft_werken(tmp_path, monkeypatch):
+    """Adapters op 0.4 kennen wel de afzender maar nog geen kanaal."""
+    class AdapterZonderKanaal:
+        def ask(self, prompt, sender=""):
+            return "ok"
+
+    state = tmp_path / "state.json"
+    b = Bridge(_cfg(state_file=str(state)), adapter=AdapterZonderKanaal())
+    msgs = [{"created_at": 100, "pubkey": "mens-1", "content": "@bot doe iets"}]
+    verstuurd = []
+    monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
+    monkeypatch.setattr(b, "_send", lambda ch, text, reply_to=None: verstuurd.append(text))
+    b._save_state({"chan-1": 99})
+    b.process_once()
+    assert verstuurd == ["ok"]

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+- Ook het kanaal gaat mee naar de adapter: `Adapter.ask(prompt, sender, channel)`,
+  als `BUZZ_CHANNEL_ID` in de omgeving van een `CliAdapter`-commando. Met meerdere
+  kanalen moet een agent weten waar een bericht vandaan komt — anders beantwoordt hij
+  een vraag over het ene onderwerp met de context van het andere.
+- Adapters met alleen `ask(prompt)` of `ask(prompt, sender)` blijven werken.
+
 ## 0.4.0
 
 - De afzender van een bericht gaat mee naar de adapter: `Adapter.ask(prompt, sender)`,
