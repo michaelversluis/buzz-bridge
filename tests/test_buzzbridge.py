@@ -284,3 +284,40 @@ def test_unknown_adapter_raises():
         assert False
     except ValueError as e:
         assert "unknown adapter" in str(e)
+
+
+def test_afzender_gaat_mee_naar_de_adapter(tmp_path, monkeypatch):
+    """De wrapper moet weten wie het vroeg — anders kan geciteerde tekst van
+    buiten (Hermes die e-mail samenvat) een schrijfactie uitlokken."""
+    gezien = {}
+
+    class AdapterMetAfzender:
+        def ask(self, prompt, sender=""):
+            gezien["sender"] = sender
+            return "ok"
+
+    state = tmp_path / "state.json"
+    b = Bridge(_cfg(state_file=str(state)), adapter=AdapterMetAfzender())
+    msgs = [{"created_at": 100, "pubkey": "mens-1", "content": "@bot doe iets"}]
+    monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
+    monkeypatch.setattr(b, "_send", lambda ch, text, reply_to=None: None)
+    b._save_state({"chan-1": 99})
+    b.process_once()
+    assert gezien["sender"] == "mens-1"
+
+
+def test_oude_adapter_zonder_afzender_blijft_werken(tmp_path, monkeypatch):
+    """Adapters van buiten deze repo hebben alleen ask(prompt)."""
+    class OudeAdapter:
+        def ask(self, prompt):
+            return "ok"
+
+    state = tmp_path / "state.json"
+    b = Bridge(_cfg(state_file=str(state)), adapter=OudeAdapter())
+    msgs = [{"created_at": 100, "pubkey": "mens-1", "content": "@bot doe iets"}]
+    verstuurd = []
+    monkeypatch.setattr(b, "_get", lambda ch, since: [m for m in msgs if m["created_at"] > since])
+    monkeypatch.setattr(b, "_send", lambda ch, text, reply_to=None: verstuurd.append(text))
+    b._save_state({"chan-1": 99})
+    b.process_once()
+    assert verstuurd == ["ok"]

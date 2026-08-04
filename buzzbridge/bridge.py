@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import inspect
 import subprocess
 import sys
 import time
@@ -189,7 +190,7 @@ class Bridge:
                 state[channel] = max(int(state.get(channel, 0)), ts)
                 self._save_state(state)
                 prompt = self.build_context(channel, m) + self.clean_prompt(text)
-                reply = self._answer(prompt)
+                reply = self._answer(prompt, m.get("pubkey", ""))
                 if (reply and self.cfg.silence_token
                         and reply.strip() == self.cfg.silence_token):
                     self._log("declined %s" % (m.get("id") or "")[:8])
@@ -202,8 +203,18 @@ class Bridge:
             state[channel] = max(int(state.get(channel, 0)), newest)
         self._save_state(state)
 
-    def _answer(self, prompt: str) -> str:
+    def _accepts_sender(self) -> bool:
+        """Kent deze adapter de afzender-parameter? Adapters van buiten deze
+        repo (van vóór 0.4) hebben alleen ask(prompt) — die blijven werken."""
         try:
+            return len(inspect.signature(self.adapter.ask).parameters) >= 2
+        except (TypeError, ValueError):
+            return False
+
+    def _answer(self, prompt: str, sender: str = "") -> str:
+        try:
+            if self._accepts_sender():
+                return self.adapter.ask(prompt, sender) or "(no answer)"
             return self.adapter.ask(prompt) or "(no answer)"
         except subprocess.TimeoutExpired:
             return "⏳ That took too long — try again or split the question."

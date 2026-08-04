@@ -7,6 +7,7 @@ harness means adding one small class here; the bridge core never changes.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import urllib.request
@@ -15,7 +16,7 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
 
 class Adapter:
-    def ask(self, prompt: str) -> str:  # pragma: no cover - interface
+    def ask(self, prompt: str, sender: str = "") -> str:  # pragma: no cover - interface
         raise NotImplementedError
 
 
@@ -43,10 +44,14 @@ class CliAdapter(Adapter):
         self.extract = options.get("extract")
         self.box_agent = options.get("box_agent")
 
-    def ask(self, prompt: str) -> str:
+    def ask(self, prompt: str, sender: str = "") -> str:
         argv = [prompt if tok == "{prompt}" else tok.replace("{prompt}", prompt)
                 for tok in self.command]
-        r = subprocess.run(argv, capture_output=True, text=True,
+        # De afzender gaat mee als omgevingsvariabele zodat een wrapper kan
+        # bepalen wat hij mag. Zonder dit kan een agent die tekst van buiten
+        # citeert (Hermes vat e-mail samen) een schrijfactie uitlokken.
+        omgeving = dict(os.environ, BUZZ_SENDER_PUBKEY=sender or "")
+        r = subprocess.run(argv, capture_output=True, text=True, env=omgeving,
                            cwd=self.cwd, timeout=self.timeout)
         out = r.stdout or ""
         if self.strip_ansi:
@@ -83,7 +88,7 @@ class HttpAdapter(Adapter):
         self.reply_path = options.get("reply_path")
         self.timeout = int(options.get("timeout", 120))
 
-    def ask(self, prompt: str) -> str:
+    def ask(self, prompt: str, sender: str = "") -> str:
         body = _fill(self.body_template, prompt)
         data = json.dumps(body).encode()
         req = urllib.request.Request(self.url, data=data, method=self.method,
@@ -109,7 +114,7 @@ class AnthropicAdapter(Adapter):
         self.max_tokens = int(options.get("max_tokens", 1024))
         self.system = options.get("system")
 
-    def ask(self, prompt: str) -> str:
+    def ask(self, prompt: str, sender: str = "") -> str:
         body = {"model": self.model, "max_tokens": self.max_tokens,
                 "messages": [{"role": "user", "content": prompt}]}
         if self.system:

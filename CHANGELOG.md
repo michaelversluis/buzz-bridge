@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+- De afzender van een bericht gaat mee naar de adapter: `Adapter.ask(prompt, sender)`,
+  en `CliAdapter` zet hem als `BUZZ_SENDER_PUBKEY` in de omgeving van het commando.
+  Zo kan een wrapper onderscheiden wie iets vraagt — nodig zodra een agent meer mag
+  dan lezen, want een agent die tekst van buiten citeert (bijvoorbeeld een
+  e-mailsamenvatting) mag geen schrijfactie kunnen uitlokken.
+- Adapters van buiten deze repo die alleen `ask(prompt)` kennen blijven werken; de
+  bridge kijkt naar de signatuur voordat hij de afzender meegeeft.
+
 ## 0.3.2
 - **Fix:** replies starting with `-` (bullet lists) were parsed as CLI flags
   and silently never posted; content is now passed dash-safe (`--content=`).
